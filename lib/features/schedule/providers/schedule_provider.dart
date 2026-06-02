@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../models/schedule_item.dart';
+import '../../notifications/notification_service.dart';
+
 
 final scheduleProvider = AsyncNotifierProvider<ScheduleNotifier, List<ScheduleItem>>(
   ScheduleNotifier.new,
@@ -9,14 +11,19 @@ final scheduleProvider = AsyncNotifierProvider<ScheduleNotifier, List<ScheduleIt
 class ScheduleNotifier extends AsyncNotifier<List<ScheduleItem>> {
   @override
   Future<List<ScheduleItem>> build() async {
-    return ref.read(scheduleRepositoryProvider).getScheduleItems();
+    final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
+    // Przy każdym pobraniu danych z bazy aktualizujemy systemowe alarmy
+    await NotificationService.rescheduleAll(items);
+    return items;
   }
 
   Future<void> addScheduleItem(ScheduleItem item) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await ref.read(scheduleRepositoryProvider).addScheduleItem(item);
-      return ref.read(scheduleRepositoryProvider).getScheduleItems();
+      final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
+      await NotificationService.rescheduleAll(items); // Aktualizacja alarmów
+      return items;
     });
   }
 
@@ -24,22 +31,20 @@ class ScheduleNotifier extends AsyncNotifier<List<ScheduleItem>> {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await ref.read(scheduleRepositoryProvider).deleteScheduleItem(id);
-      return ref.read(scheduleRepositoryProvider).getScheduleItems();
+      final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
+      await NotificationService.rescheduleAll(items); // Aktualizacja alarmów
+      return items;
     });
   }
 }
 
-// QoL: Rodzina providerów, która pozwala UI zapytać: "Hej, daj mi tylko zajęcia na wtorek (2)"
-final scheduleByDayProvider = Provider.family<List<ScheduleItem>, int>((ref, dayOfWeek) {
+// QoL: Rodzina providerów, która zwraca zajęcia z zachowaniem stanu ładowania/błędu (AsyncValue)
+final scheduleByDayProvider = Provider.family<AsyncValue<List<ScheduleItem>>, int>((ref, dayOfWeek) {
   final scheduleState = ref.watch(scheduleProvider);
-  
-  return scheduleState.maybeWhen(
-    data: (items) {
-      // Wyciągamy zajęcia z danego dnia i sortujemy od najwcześniejszych
-      final filtered = items.where((item) => item.dayOfWeek == dayOfWeek).toList();
-      filtered.sort((a, b) => a.startTime.compareTo(b.startTime));
-      return filtered;
-    },
-    orElse: () => [], // Jeśli ładuje lub jest błąd, zwracamy pusto
-  );
+
+  return scheduleState.whenData((items) {
+    final filtered = items.where((item) => item.dayOfWeek == dayOfWeek).toList();
+    filtered.sort((a, b) => a.startTime.compareTo(b.startTime));
+    return filtered;
+  });
 });

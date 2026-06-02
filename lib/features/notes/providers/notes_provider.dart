@@ -2,30 +2,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/repository_providers.dart';
 import '../models/note.dart';
 
-// Przekazujemy <Parametr (String), Stan (List<Note>)>
-final notesProvider = AsyncNotifierProviderFamily<NotesNotifier, List<Note>, String>(
-  NotesNotifier.new,
-);
+// 1. Zwykły FutureProvider - pobiera dane z bazy i SAM załatwia stan ładowania (AsyncValue)
+final notesProvider = FutureProvider.family<List<Note>, String>((ref, subjectId) async {
+  return ref.read(noteRepositoryProvider).getNotesForSubject(subjectId);
+});
 
-class NotesNotifier extends FamilyAsyncNotifier<List<Note>, String> {
-  @override
-  Future<List<Note>> build(String arg) async {
-    // 'arg' to nasz subjectId
-    return ref.read(noteRepositoryProvider).getNotesForSubject(arg);
+// 2. Prosty kontroler do akcji (dodawanie i odhaczanie)
+final notesControllerProvider = Provider<NotesController>((ref) => NotesController(ref));
+
+class NotesController {
+  final Ref ref;
+  NotesController(this.ref);
+
+  Future<void> addNote(String subjectId, Note note) async {
+    await ref.read(noteRepositoryProvider).addNote(note);
+
+    // Magia Riverpoda: mówimy mu "odśwież notatki dla tego przedmiotu"
+    ref.invalidate(notesProvider(subjectId));
   }
 
-  Future<void> addNote(Note note) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await ref.read(noteRepositoryProvider).addNote(note);
-      return ref.read(noteRepositoryProvider).getNotesForSubject(arg);
-    });
-  }
-
-  Future<void> toggleTask(String noteId, bool isCompleted) async {
-    // Tutaj nie dajemy stanu 'loading', żeby checkboxy w UI klikały się natychmiastowo bez mrugania (Optimistic UI update można dodać tu w przyszłości)
+  Future<void> toggleTask(String subjectId, String noteId, bool isCompleted) async {
     await ref.read(noteRepositoryProvider).toggleTaskCompletion(noteId, isCompleted);
-    // Odświeżamy listę w tle
-    ref.invalidateSelf(); 
+
+    // Znowu odświeżamy listę po zmianie statusu
+    ref.invalidate(notesProvider(subjectId));
   }
 }

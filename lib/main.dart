@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/supabase_constants.dart';
 import 'core/routing/app_router.dart';
+import 'features/notifications/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // --- START POWIADOMIEŃ ---
+  await NotificationService.init();
 
   await Supabase.initialize(
     url: SupabaseConstants.supabaseUrl,
@@ -30,7 +34,7 @@ class UniScheduleApp extends ConsumerWidget {
         useMaterial3: true,
       ),
       // Podpinamy konfigurację GoRoutera
-      routerConfig: router, 
+      routerConfig: router,
     );
   }
 }

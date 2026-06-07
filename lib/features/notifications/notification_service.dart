@@ -27,31 +27,45 @@ class NotificationService {
     await androidImpl?.requestExactAlarmsPermission();
   }
 
-  static tz.TZDateTime _nextInstanceOf(int dayOfWeek, String timeStr, int offsetMinutes) {
+// Zaktualizowana logika obliczania czasu
+  static tz.TZDateTime _nextInstanceOf(int dayOfWeek, String timeStr, int offsetMinutes, String? specificDateStr) {
     final now = tz.TZDateTime.now(tz.local);
     final parts = timeStr.split(':');
     final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
 
-    tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute).subtract(Duration(minutes: offsetMinutes));
-
-    while (scheduledDate.weekday != dayOfWeek || scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    if (specificDateStr != null) {
+      // Jeśli to zajęcia jednorazowe, przypinamy je sztywno do tej konkretnej daty
+      final parsedDate = DateTime.parse(specificDateStr);
+      return tz.TZDateTime(tz.local, parsedDate.year, parsedDate.month, parsedDate.day, hour, minute).subtract(Duration(minutes: offsetMinutes));
+    } else {
+      // Jeśli to zajęcia cykliczne, szukamy najbliższego dnia tygodnia
+      tz.TZDateTime scheduledDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute).subtract(Duration(minutes: offsetMinutes));
+      while (scheduledDate.weekday != dayOfWeek || scheduledDate.isBefore(now)) {
+        scheduledDate = scheduledDate.add(const Duration(days: 1));
+      }
+      return scheduledDate;
     }
-    return scheduledDate;
   }
 
+  // Zaktualizowana funkcja harmonogramu
   static Future<void> rescheduleAll(List<ScheduleItem> items) async {
-    // 2. Podwójne zabezpieczenie dla Weba
-    if (kIsWeb) return;
+    if (kIsWeb) return; 
 
     await _notifications.cancelAll();
 
     for (var item in items) {
-      if (item.id == null || item.subject == null) continue;
+      // Jeśli ustawiłeś -1 (Brak powiadomienia), to pomijamy to zadanie!
+      if (item.id == null || item.subject == null || item.reminderOffset == -1) continue;
 
-      final scheduledTime = _nextInstanceOf(item.dayOfWeek, item.startTime, item.reminderOffset);
+      final scheduledTime = _nextInstanceOf(item.dayOfWeek, item.startTime, item.reminderOffset, item.specificDate);
       final notificationId = item.id.hashCode;
+
+      // Jeśli mamy dokładną datę, NIE dajemy "matchDateTimeComponents" (brak pętli)
+      final isOneOff = item.specificDate != null;
+
+      // Jeśli zajęcia jednorazowe minęły, nie ma sensu ustawiać na nie alarmu w przeszłości
+      if (isOneOff && scheduledTime.isBefore(tz.TZDateTime.now(tz.local))) continue;
 
       await _notifications.zonedSchedule(
         notificationId,
@@ -68,7 +82,8 @@ class NotificationService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+        // Zapętlaj TYLKO zajęcia cykliczne
+        matchDateTimeComponents: isOneOff ? null : DateTimeComponents.dayOfWeekAndTime,
       );
     }
   }

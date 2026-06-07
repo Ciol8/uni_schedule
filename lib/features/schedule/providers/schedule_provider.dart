@@ -39,11 +39,27 @@ class ScheduleNotifier extends AsyncNotifier<List<ScheduleItem>> {
 }
 
 // QoL: Rodzina providerów, która zwraca zajęcia z zachowaniem stanu ładowania/błędu (AsyncValue)
-final scheduleByDayProvider = Provider.family<AsyncValue<List<ScheduleItem>>, int>((ref, dayOfWeek) {
+// Zmieniamy nazwę na scheduleByDateProvider i przyjmujemy obiekt DateTime
+final scheduleByDateProvider = Provider.family<AsyncValue<List<ScheduleItem>>, DateTime>((ref, date) {
   final scheduleState = ref.watch(scheduleProvider);
-
+  
   return scheduleState.whenData((items) {
-    final filtered = items.where((item) => item.dayOfWeek == dayOfWeek).toList();
+    final filtered = items.where((item) {
+      
+      // 1. ZAJĘCIA JEDNORAZOWE (Wyjątki)
+      if (item.specificDate != null) {
+        final specificDate = DateTime.parse(item.specificDate!);
+        // Pokaż tylko jeśli dzisiejsza data IDEALNIE zgadza się z datą zajęć
+        return specificDate.year == date.year &&
+               specificDate.month == date.month &&
+               specificDate.day == date.day;
+      }
+      
+      // 2. REGULARNE ZAJĘCIA CO TYDZIEŃ
+      return item.dayOfWeek == date.weekday;
+      
+    }).toList();
+    
     filtered.sort((a, b) => a.startTime.compareTo(b.startTime));
     return filtered;
   });

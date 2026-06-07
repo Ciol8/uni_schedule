@@ -32,7 +32,7 @@ class ScheduleRepository {
     // Magia Supabase: W jednym zapytaniu wyciągamy zajęcia ORAZ podpięty pod nie przedmiot
     final response = await _client
         .from('schedule_items')
-        .select('*, subjects(*)')
+        .select('*, subjects(*), schedule_cancellations(cancelled_date)')
         .eq('user_id', userId);
         
     return response.map((json) => ScheduleItem.fromJson(json)).toList();
@@ -50,5 +50,14 @@ class ScheduleRepository {
   
   Future<void> deleteScheduleItem(String id) async {
      await _client.from('schedule_items').delete().eq('id', id);
+  }
+
+  Future<void> cancelClassForDate(String scheduleItemId, DateTime date) async {
+    final dateString = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+    await _client.from('schedule_cancellations').insert({
+      'schedule_item_id': scheduleItemId,
+      'cancelled_date': dateString,
+    });
   }
 }

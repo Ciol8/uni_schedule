@@ -9,9 +9,12 @@ class ScheduleItem {
   final int dayOfWeek;
   final String startTime;
   final String endTime;
-  final bool isRecurring;
   final int reminderOffset;
-  final Subject? subject; // Automatyczne dołączanie danych z innej tabeli (JOIN)
+  final Subject? subject;
+  final String? specificDate;
+
+  // --- NOWA ZMIENNA: Lista odwołanych dat ---
+  final List<String> cancelledDates;
 
   ScheduleItem({
     this.id,
@@ -22,25 +25,29 @@ class ScheduleItem {
     required this.dayOfWeek,
     required this.startTime,
     required this.endTime,
-    this.isRecurring = true,
     this.reminderOffset = 15,
     this.subject,
+    this.specificDate,
+    this.cancelledDates = const [], // Domyślnie pusta lista
   });
 
   factory ScheduleItem.fromJson(Map<String, dynamic> json) {
     return ScheduleItem(
-      id: json['id'],
-      subjectId: json['subject_id'],
-      classType: json['class_type'],
-      location: json['location'],
-      meetingLink: json['meeting_link'],
-      dayOfWeek: json['day_of_week'],
-      startTime: json['start_time'],
-      endTime: json['end_time'],
-      isRecurring: json['is_recurring'] ?? true,
-      reminderOffset: json['reminder_offset'] ?? 15,
-      // Supabase zwraca połączone dane jako zagnieżdżony obiekt
-      subject: json['subjects'] != null ? Subject.fromJson(json['subjects']) : null, 
+      id: json['id'] as String?,
+      subjectId: json['subject_id'] as String,
+      classType: json['class_type'] as String,
+      location: json['location'] as String?,
+      meetingLink: json['meeting_link'] as String?,
+      dayOfWeek: json['day_of_week'] as int,
+      startTime: json['start_time'] as String,
+      endTime: json['end_time'] as String,
+      reminderOffset: json['reminder_offset'] as int? ?? 15,
+      specificDate: json['specific_date'] as String?,
+      subject: json['subjects'] != null ? Subject.fromJson(json['subjects']) : null,
+      // Magia: wyciągamy listę odwołanych dat z podrzędnej tabeli
+      cancelledDates: (json['schedule_cancellations'] as List<dynamic>?)
+          ?.map((e) => e['cancelled_date'] as String)
+          .toList() ?? [],
     );
   }
 
@@ -49,13 +56,13 @@ class ScheduleItem {
       if (id != null) 'id': id,
       'subject_id': subjectId,
       'class_type': classType,
-      if (location != null) 'location': location,
-      if (meetingLink != null) 'meeting_link': meetingLink,
+      'location': location,
+      'meeting_link': meetingLink,
       'day_of_week': dayOfWeek,
       'start_time': startTime,
       'end_time': endTime,
-      'is_recurring': isRecurring,
       'reminder_offset': reminderOffset,
+      'specific_date': specificDate,
     };
   }
 }

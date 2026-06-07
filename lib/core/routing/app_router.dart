@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,6 +10,10 @@ import '../../features/schedule/screens/home_screen.dart';
 import '../../features/schedule/screens/add_class_screen.dart';
 import '../../features/notes/screens/subject_notes_screen.dart';
 import '../../features/schedule/models/subject.dart';
+import '../../features/schedule/screens/manage_subjects_screen.dart';
+import '../../features/schedule/screens/main_screen.dart';
+import '../../features/schedule/screens/class_details_screen.dart';
+import '../../features/schedule/models/schedule_item.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Podpinamy się pod zmiany stanu autoryzacji
@@ -31,13 +37,33 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/',
-        builder: (context, state) => const HomeScreen(),
+        builder: (context, state) => const MainScreen(),
       ),
       GoRoute(
         path: '/add-class',
-        builder: (context, state) => const AddClassScreen(),
+        builder: (context, state) {
+          // Odbieramy parametry, jeśli jakieś zostały przekazane (extra)
+          final item = state.extra as ScheduleItem?;
+          return AddClassScreen(itemToEdit: item);
+        },
       ),
-      // --- TUTAJ JEST NASZA NOWA TRASA ---
+      // Zadbaj o zaimportowanie nowego ekranu na samej górze pliku:
+
+      GoRoute(
+        path: '/class-details',
+        builder: (context, state) {
+          // Odbieramy mapę przekazaną z ClassCard
+          final extras = state.extra as Map<String, dynamic>;
+          return ClassDetailsScreen(
+            item: extras['item'] as ScheduleItem,
+            heroColor: extras['color'] as Color,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/manage-subjects',
+        builder: (context, state) => const ManageSubjectsScreen(),
+      ),
       GoRoute(
         path: '/subject/:id',
         builder: (context, state) {

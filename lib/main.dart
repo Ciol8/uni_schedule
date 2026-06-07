@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/supabase_constants.dart';
 import 'core/routing/app_router.dart';
 import 'features/notifications/notification_service.dart';
+import 'core/providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,14 +27,22 @@ class UniScheduleApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeModeProvider); // <-- Nasłuchujemy zmiany motywu
 
     return MaterialApp.router(
       title: 'Plan Zajęć',
+      debugShowCheckedModeBanner: false,
+      themeMode: themeMode, // <-- Ustawiamy motyw
+      // --- MOTYW JASNY ---
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF070291)),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF070291), brightness: Brightness.light),
         useMaterial3: true,
       ),
-      // Podpinamy konfigurację GoRoutera
+      // --- MOTYW CIEMNY ---
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF070291), brightness: Brightness.dark),
+        useMaterial3: true,
+      ),
       routerConfig: router,
     );
   }

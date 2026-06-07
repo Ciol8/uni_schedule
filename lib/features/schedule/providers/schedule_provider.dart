@@ -16,7 +16,15 @@ class ScheduleNotifier extends AsyncNotifier<List<ScheduleItem>> {
     await NotificationService.rescheduleAll(items);
     return items;
   }
-
+  Future<void> updateScheduleItem(ScheduleItem item) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(scheduleRepositoryProvider).updateScheduleItem(item);
+      final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
+      await NotificationService.rescheduleAll(items); // Re-generujemy alarmy po edycji
+      return items;
+    });
+  }
   Future<void> addScheduleItem(ScheduleItem item) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -33,6 +41,18 @@ class ScheduleNotifier extends AsyncNotifier<List<ScheduleItem>> {
       await ref.read(scheduleRepositoryProvider).deleteScheduleItem(id);
       final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
       await NotificationService.rescheduleAll(items); // Aktualizacja alarmów
+      return items;
+    });
+  }
+
+  Future<void> cancelItem(String id, DateTime date) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      // 1. Zapisujemy odwołanie w bazie
+      await ref.read(scheduleRepositoryProvider).cancelClassForDate(id, date);
+      // 2. Pobieramy odświeżoną listę (żeby pobrał się nowy status)
+      final items = await ref.read(scheduleRepositoryProvider).getScheduleItems();
+
       return items;
     });
   }

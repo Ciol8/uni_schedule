@@ -5,6 +5,7 @@ class Note {
   final String? content;
   final bool isTask;
   final bool isCompleted;
+  final int priority;
 
   Note({
     this.id,
@@ -13,16 +14,18 @@ class Note {
     this.content,
     this.isTask = false,
     this.isCompleted = false,
+    this.priority = 1,
   });
 
   factory Note.fromJson(Map<String, dynamic> json) {
     return Note(
-      id: json['id'],
-      subjectId: json['subject_id'],
-      title: json['title'],
-      content: json['content'],
-      isTask: json['is_task'] ?? false,
-      isCompleted: json['is_completed'] ?? false,
+      id: json['id'] as String?,
+      subjectId: json['subject_id'] as String,
+      title: json['title'] as String,
+      content: json['content'] as String?,
+      isTask: json['is_task'] as bool? ?? false,
+      isCompleted: json['is_completed'] as bool? ?? false,
+      priority: json['priority'] as int? ?? 1,
     );
   }
 
@@ -31,9 +34,10 @@ class Note {
       if (id != null) 'id': id,
       'subject_id': subjectId,
       'title': title,
-      if (content != null) 'content': content,
+      'content': content,
       'is_task': isTask,
       'is_completed': isCompleted,
+      'priority': priority,
     };
   }
 }

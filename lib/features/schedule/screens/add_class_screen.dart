@@ -8,7 +8,9 @@ import '../providers/schedule_provider.dart';
 import '../providers/subjects_provider.dart';
 
 class AddClassScreen extends ConsumerStatefulWidget {
-  const AddClassScreen({super.key});
+  final ScheduleItem? itemToEdit; // <--- Jeśi to przekażemy, formularz wejdzie w tryb Edycji
+
+  const AddClassScreen({super.key, this.itemToEdit});
 
   @override
   ConsumerState<AddClassScreen> createState() => _AddClassScreenState();
@@ -18,23 +20,49 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
   final _formKey = GlobalKey<FormState>();
 
   String? _selectedSubjectId;
-  String _selectedClassType = 'Wykład';
-  int _selectedDay = 1;
+  late String _selectedClassType;
+  late int _selectedDay;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
-  int _reminderOffset = 15;
+  late int _reminderOffset;
 
-  // --- NOWE ZMIENNE DLA ZAJĘĆ JEDNORAZOWYCH ---
-  bool _isOneOff = false;
+  late bool _isOneOff;
   DateTime? _selectedDate;
 
-  final _locationController = TextEditingController();
-  final _linkController = TextEditingController();
+  late TextEditingController _locationController;
+  late TextEditingController _linkController;
 
   final List<String> _classTypes = ['Wykład', 'Laboratoria', 'Ćwiczenia', 'Seminarium', 'Inne'];
   final List<String> _daysOfWeek = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela'];
-// Dodajemy -1 na początku
   final List<int> _reminderOptions = [-1, 0, 5, 10, 15, 30, 60, 120];
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.itemToEdit; // Skrót dla wygody
+
+    // Inicjalizacja pól – albo wartościami z edytowanych zajęć, albo domyślnymi
+    _selectedSubjectId = item?.subjectId;
+    _selectedClassType = item?.classType ?? 'Wykład';
+    _selectedDay = item?.dayOfWeek ?? 1;
+    _reminderOffset = item?.reminderOffset ?? 15;
+
+    _isOneOff = item?.specificDate != null;
+    if (_isOneOff && item != null) {
+      _selectedDate = DateTime.parse(item.specificDate!);
+    }
+
+    if (item != null) {
+      final startParts = item.startTime.split(':');
+      _startTime = TimeOfDay(hour: int.parse(startParts[0]), minute: int.parse(startParts[1]));
+
+      final endParts = item.endTime.split(':');
+      _endTime = TimeOfDay(hour: int.parse(endParts[0]), minute: int.parse(endParts[1]));
+    }
+
+    _locationController = TextEditingController(text: item?.location ?? '');
+    _linkController = TextEditingController(text: item?.meetingLink ?? '');
+  }
 
   @override
   void dispose() {
@@ -62,7 +90,6 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
     }
   }
 
-  // Nowa funkcja wyboru daty
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -105,15 +132,11 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
   }
 
   Future<void> _saveForm() async {
-    // Walidacja upewniająca się, że jeśli to zajęcia jednorazowe, data musi być wybrana
     if (!_formKey.currentState!.validate() || _selectedSubjectId == null || _startTime == null || _endTime == null || (_isOneOff && _selectedDate == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Uzupełnij wszystkie wymagane pola, daty i godziny!'), backgroundColor: Colors.orange),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uzupełnij wymagane pola!'), backgroundColor: Colors.orange));
       return;
     }
 
-    // Jeśli to zajęcia jednorazowe, formujemy datę do SQL i ukrywamy pod nią poprawny dzień tygodnia
     String? specificDateStr;
     int finalDayOfWeek = _selectedDay;
 
@@ -126,6 +149,7 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
     }
 
     final newItem = ScheduleItem(
+      id: widget.itemToEdit?.id, // <-- WAŻNE: Jeśli to edycja, wysyłamy stare ID
       subjectId: _selectedSubjectId!,
       classType: _selectedClassType,
       location: _locationController.text.trim().isEmpty ? null : _locationController.text.trim(),
@@ -134,28 +158,30 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
       startTime: _formatTimeOfDay(_startTime!),
       endTime: _formatTimeOfDay(_endTime!),
       reminderOffset: _reminderOffset,
-      specificDate: specificDateStr, // Przekazujemy nową datę!
+      specificDate: specificDateStr,
     );
 
     try {
-      await ref.read(scheduleProvider.notifier).addScheduleItem(newItem);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zajęcia dodane pomyślnie!')));
-        context.pop();
+      if (widget.itemToEdit == null) {
+        await ref.read(scheduleProvider.notifier).addScheduleItem(newItem);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zajęcia dodane!')));
+      } else {
+        await ref.read(scheduleProvider.notifier).updateScheduleItem(newItem);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Zajęcia zaktualizowane!')));
       }
+      if (mounted) context.pop();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Błąd zapisu: $e'), backgroundColor: Colors.red));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Błąd zapisu: $e'), backgroundColor: Colors.red));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final subjectsAsync = ref.watch(subjectsProvider);
+    final isEditing = widget.itemToEdit != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dodaj nowe zajęcia')),
+      appBar: AppBar(title: Text(isEditing ? 'Edytuj zajęcia' : 'Dodaj nowe zajęcia')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -194,7 +220,6 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
               ),
               const SizedBox(height: 24),
 
-              // --- PRZEŁĄCZNIK ZAJĘĆ JEDNORAZOWYCH ---
               Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
@@ -209,7 +234,6 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
               ),
               const SizedBox(height: 16),
 
-              // --- DYNAMICZNY WYBÓR (Dzień tygodnia vs Konkretna data) ---
               if (_isOneOff)
                 OutlinedButton.icon(
                   onPressed: _pickDate,
@@ -219,14 +243,11 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
                 )
               else
                 DropdownButtonFormField<int>(
-                value: _reminderOffset,
-                decoration: const InputDecoration(labelText: 'Przypomnienie przed zajęciami', border: OutlineInputBorder(), prefixIcon: Icon(Icons.notifications_active_rounded)),
-                items: _reminderOptions.map((val) => DropdownMenuItem(
-                  value: val, 
-                  child: Text(val == -1 ? 'Brak powiadomienia' : (val == 0 ? 'W momencie rozpoczęcia' : '$val minut przed'))
-                )).toList(),
-                onChanged: (val) => setState(() => _reminderOffset = val!),
-              ),
+                  value: _selectedDay,
+                  decoration: const InputDecoration(labelText: 'Dzień tygodnia powtarzania *', border: OutlineInputBorder()),
+                  items: List.generate(7, (index) => DropdownMenuItem(value: index + 1, child: Text(_daysOfWeek[index]))),
+                  onChanged: (val) => setState(() => _selectedDay = val!),
+                ),
               const SizedBox(height: 24),
 
               Row(
@@ -255,7 +276,7 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
               DropdownButtonFormField<int>(
                 value: _reminderOffset,
                 decoration: const InputDecoration(labelText: 'Przypomnienie przed zajęciami', border: OutlineInputBorder(), prefixIcon: Icon(Icons.notifications_active_rounded)),
-                items: _reminderOptions.map((val) => DropdownMenuItem(value: val, child: Text(val == 0 ? 'W momencie rozpoczęcia' : '$val minut przed'))).toList(),
+                items: _reminderOptions.map((val) => DropdownMenuItem(value: val, child: Text(val == -1 ? 'Brak powiadomienia' : (val == 0 ? 'W momencie rozpoczęcia' : '$val minut przed')))).toList(),
                 onChanged: (val) => setState(() => _reminderOffset = val!),
               ),
               const SizedBox(height: 24),
@@ -276,7 +297,7 @@ class _AddClassScreenState extends ConsumerState<AddClassScreen> {
               ElevatedButton(
                 onPressed: _saveForm,
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
-                child: const Text('Zapisz w planie zajęć', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text(isEditing ? 'Zapisz zmiany' : 'Zapisz w planie zajęć', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
